@@ -1,5 +1,7 @@
 # Agent Skills
 
+[![skills.sh](https://skills.sh/b/sharanharsoor/skills)](https://skills.sh/sharanharsoor/skills)
+
 A collection of [agentskills.io](https://agentskills.io)-compatible agent skills for AI coding tools.
 
 Verified against real library APIs. Works with Cursor, Claude Code, Codex CLI, Gemini CLI, and 10+ other agent tools.
