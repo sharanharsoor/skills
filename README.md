@@ -2,7 +2,7 @@
 
 A collection of [agentskills.io](https://agentskills.io)-compatible agent skills for AI coding tools.
 
-Verified against real library APIs. Works with Cursor, Claude Code, Codex CLI, Gemini CLI, and any tool supporting SKILL.md.
+Verified against real library APIs. Works with Cursor, Claude Code, Codex CLI, Gemini CLI, and 10+ other agent tools.
 
 ## Skills
 
@@ -19,12 +19,10 @@ Production patterns for FastMCP Python MCP servers.
 #### Install
 
 ```bash
-# Cursor
-npx add-skill https://github.com/sharsoor/skills --skill fastmcp -a cursor -y
-
-# Claude Code
-npx add-skill https://github.com/sharsoor/skills --skill fastmcp -a claude-code -y
+npx skills add sharanharsoor/skills
 ```
+
+Works with Cursor, Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, and 10+ more.
 
 #### Why this skill exists
 
@@ -37,12 +35,6 @@ Without it, LLMs confidently hallucinate FastMCP APIs:
 | "How do I access tool args in middleware?" | Uses `context.name`, `context.arguments` (AttributeError) | Uses `context.message.name`, `context.message.arguments` |
 
 ---
-
-## Install any skill
-
-```bash
-npx add-skill https://github.com/sharsoor/skills --skill <skill-name> -a cursor -y
-```
 
 ## License
 
