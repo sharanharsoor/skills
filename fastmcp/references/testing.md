@@ -19,11 +19,11 @@ Call tool functions directly with `ctx=None`. No server, no port, no subprocess 
 
 ```python
 import pytest
-from my_server.tools import search_items, catalog_tool
+from my_server.tools import get_records, resource_tool
 
 @pytest.mark.asyncio
 async def test_search_returns_results():
-    result = await search_items(query="widget", limit=5, ctx=None)
+    result = await get_records(query="widget", limit=5, ctx=None)
     assert result["status"] == "success"
     assert "output" in result
     assert "data" in result
@@ -31,7 +31,7 @@ async def test_search_returns_results():
 
 @pytest.mark.asyncio
 async def test_search_empty_results():
-    result = await search_items(query="xzxzxzxz_not_found", ctx=None)
+    result = await get_records(query="xzxzxzxz_not_found", ctx=None)
     assert result["status"] == "success"
     assert result["count"] == 0
     assert "No" in result["output"]  # human-friendly empty message, not an exception
@@ -39,7 +39,7 @@ async def test_search_empty_results():
 @pytest.mark.asyncio
 async def test_search_missing_required_param():
     # operation='list_values' requires column
-    result = await catalog_tool(operation="list_values", ctx=None)
+    result = await resource_tool(operation="list_values", ctx=None)
     assert result["status"] == "error"
     assert "column" in result["error"].lower()
     assert "Valid:" in result["error"] or "schema" in result["error"]  # guides the caller
@@ -50,13 +50,13 @@ async def test_search_missing_required_param():
 ```python
 @pytest.mark.asyncio
 async def test_multi_op_unknown_operation():
-    result = await catalog_tool(operation="nonexistent", ctx=None)
+    result = await resource_tool(operation="nonexistent", ctx=None)
     assert result["status"] == "error"
     assert "Valid:" in result["error"]
 
 @pytest.mark.asyncio
 async def test_multi_op_list_values():
-    result = await catalog_tool(operation="list_values", column="CATEGORY", ctx=None)
+    result = await resource_tool(operation="list_values", column="STATUS", ctx=None)
     assert result["status"] == "success"
     assert isinstance(result["values"], list)
     assert len(result["values"]) > 0
@@ -64,10 +64,10 @@ async def test_multi_op_list_values():
 @pytest.mark.asyncio
 async def test_multi_op_search_after_list_values():
     # Simulate the agent workflow: list_values first, then search
-    lv_result = await catalog_tool(operation="list_values", column="CATEGORY", ctx=None)
+    lv_result = await resource_tool(operation="list_values", column="STATUS", ctx=None)
     first_category = lv_result["values"][0]
 
-    search_result = await catalog_tool(
+    search_result = await resource_tool(
         operation="search", query="item", category=first_category, ctx=None
     )
     assert search_result["status"] in ("success", "partial")
@@ -81,8 +81,8 @@ from unittest.mock import AsyncMock, patch
 @pytest.mark.asyncio
 async def test_partial_failure_continues():
     """When enrichment fails, base data should still return."""
-    with patch("my_server.tools.fetch_enrichment", side_effect=Exception("timeout")):
-        result = await enrich_items(item_ids=["item1", "item2"], ctx=None)
+    with patch("my_server.tools.fetch_secondary_data", side_effect=Exception("timeout")):
+        result = await aggregate_items(record_ids=["rec1", "rec2"], ctx=None)
     assert result["status"] == "partial"
     assert len(result["data"]) > 0         # base data still returned
     assert len(result["errors"]) > 0       # errors reported
@@ -91,8 +91,8 @@ async def test_partial_failure_continues():
 @pytest.mark.asyncio
 async def test_hard_failure_skips_item():
     """When base data fails, the entire item is skipped."""
-    with patch("my_server.tools.fetch_base_data", side_effect=Exception("not found")):
-        result = await enrich_items(item_ids=["item1"], ctx=None)
+    with patch("my_server.tools.fetch_primary_data", side_effect=Exception("not found")):
+        result = await aggregate_items(record_ids=["rec1"], ctx=None)
     assert result["count"] == 0
     assert len(result["errors"]) == 1
 ```
@@ -103,12 +103,12 @@ async def test_hard_failure_skips_item():
 @pytest.mark.asyncio
 async def test_tool_works_without_context():
     # Must not raise AttributeError accessing ctx fields
-    result = await search_items(query="test", ctx=None)
+    result = await get_records(query="test", ctx=None)
     assert result["status"] in ("success", "error")  # no AttributeError
 
 @pytest.mark.asyncio
 async def test_tool_works_without_context_all_tools():
-    tools = [search_items, lookup_values, get_schema]
+    tools = [get_records, lookup_schema, get_schema]
     for tool_fn in tools:
         try:
             await tool_fn(ctx=None)  # may fail for other reasons, but not AttributeError on ctx
@@ -134,14 +134,14 @@ async def test_tools_are_registered():
     async with Client(mcp) as client:
         tools = await client.list_tools()
         tool_names = [t.name for t in tools]
-        assert "search_items" in tool_names
-        assert "catalog_tool" in tool_names
+        assert "get_records" in tool_names
+        assert "resource_tool" in tool_names
 
 @pytest.mark.asyncio
 async def test_tool_schema_has_required_params():
     async with Client(mcp) as client:
         tools = await client.list_tools()
-        search_tool = next(t for t in tools if t.name == "search_items")
+        search_tool = next(t for t in tools if t.name == "get_records")
         props = search_tool.inputSchema.get("properties", {})
         assert "query" in props                  # required param exists in schema
         assert "ctx" not in props                # ctx not exposed to LLM
@@ -149,7 +149,7 @@ async def test_tool_schema_has_required_params():
 @pytest.mark.asyncio
 async def test_tool_call_via_protocol():
     async with Client(mcp) as client:
-        result = await client.call_tool("search_items", {"query": "widget"})
+        result = await client.call_tool("get_records", {"query": "widget"})
         assert result.is_error is False
         assert result.data["status"] == "success"
         assert "output" in result.data
@@ -163,7 +163,7 @@ async def test_lifespan_initializes_state():
     """Verify startup/shutdown runs correctly and tools can access state."""
     async with Client(mcp) as client:
         # If lifespan failed, tool call will fail with AttributeError on state
-        result = await client.call_tool("search_items", {"query": "test"})
+        result = await client.call_tool("get_records", {"query": "test"})
         assert result.is_error is False  # lifespan succeeded
 ```
 
@@ -173,7 +173,7 @@ async def test_lifespan_initializes_state():
 @pytest.mark.asyncio
 async def test_tool_error_is_clean():
     async with Client(mcp) as client:
-        result = await client.call_tool("catalog_tool", {"operation": "bad_op"})
+        result = await client.call_tool("resource_tool", {"operation": "bad_op"})
         # FastMCP wraps tool errors — check the returned data shape
         assert result.data["status"] == "error"
         assert "Valid:" in result.data["error"]
